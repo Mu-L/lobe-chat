@@ -1,3 +1,15 @@
+export enum ModelProvider {
+  Anthropic = 'anthropic',
+  Bedrock = 'bedrock',
+  ChatGLM = 'chatglm',
+  Google = 'google',
+  Mistral = 'mistral',
+  OpenAI = 'openai',
+  Tongyi = 'tongyi',
+}
+
+export type ModelProviderType = ModelProvider;
+
 /**
  * LLM 模型
  */
