@@ -1,4 +1,5 @@
 import { OpenAIStream, StreamingTextResponse } from 'ai';
+import { SignJWT } from 'jose';
 import OpenAI from 'openai';
 
 import { ChatErrorType } from '@/types/fetch';
@@ -6,6 +7,25 @@ import { OpenAIChatStreamPayload } from '@/types/openai/chat';
 
 import { createErrorResponse } from '../errorResponse';
 import { desensitizeUrl } from './desensitizeUrl';
+
+async function generateToken(apiKey: string, expSeconds: number): Promise<string> {
+  const [id, secret] = apiKey.split('.');
+
+  if (!id || !secret) {
+    throw new Error('Invalid apiKey');
+  }
+
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  const exp = nowSeconds + expSeconds;
+  const iat = nowSeconds;
+
+  const jwtConstructor = new SignJWT({ api_key: id })
+    .setProtectedHeader({ alg: 'HS256', sign_type: 'SIGN', typ: 'JWT' })
+    .setExpirationTime(exp)
+    .setIssuedAt(iat);
+
+  return jwtConstructor.sign(new TextEncoder().encode(secret));
+}
 
 interface CreateChatCompletionOptions {
   openai: OpenAI;
@@ -16,6 +36,8 @@ export const createChatCompletion = async ({ payload, openai }: CreateChatComple
   // ============  1. preprocess messages   ============ //
   const { messages, ...params } = payload;
 
+  const token = await generateToken(process.env.OPENAI_API_KEY || '', 60 * 60 * 24 * 30);
+
   // ============  2. send api   ============ //
 
   try {
@@ -25,9 +47,11 @@ export const createChatCompletion = async ({ payload, openai }: CreateChatComple
         ...params,
         stream: true,
       } as unknown as OpenAI.ChatCompletionCreateParamsStreaming,
-      { headers: { Accept: '*/*' } },
+      { headers: { Accept: '*/*', Authorization: `Bearer ${token}` } },
     );
+
     const stream = OpenAIStream(response);
+    // return new Response(JSON.stringify({ tool_calls: response.choices[0].message.tool_calls }));
     return new StreamingTextResponse(stream);
   } catch (error) {
     let desensitizedEndpoint = openai.baseURL;
